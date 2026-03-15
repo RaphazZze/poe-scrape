@@ -1,0 +1,16 @@
+# System
+.DS_Store
+.claude/
+
+# Test exports
+test_*.html
+test_*.md
+test_*.json
+poe_*.html
+poe_*.md
+poe_*.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
