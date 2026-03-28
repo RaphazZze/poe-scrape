@@ -50,25 +50,50 @@ async def scrape_url(url: str) -> dict:
             except Exception:
                 pass  # Continue even if selector never appears
 
+            # Expand any auto-collapsed "Thinking" reasoning sections before extraction.
+            # Poe (Format C) uses a MarkdownThinkingBlock with a toggle button; the blockquote
+            # content is in the DOM but may need the button clicked to be fully rendered.
+            try:
+                await page.evaluate("""() => {
+                    document.querySelectorAll('[class*="MarkdownThinkingBlock_header"]').forEach(btn => btn.click());
+                }""")
+                await page.wait_for_timeout(1000)
+            except Exception:
+                pass
+
             result = await page.evaluate("""() => {
-            const rows = document.querySelectorAll('[class*="Message_row"]:not([class*="WithFooter"])');
-            const messages = [];
-            rows.forEach(el => {
-                // Get the main Markdown container and normalise its content.
-                // Two reasoning trace formats exist in Poe:
-                //
-                // Format A — NISHA-style: reasoning is a MarkdownCodeBlock_container
-                //   with language label "thoughts". Strip it.
-                //
-                // Format B — "Thinking..." (extended thinking models): reasoning is a
-                //   <blockquote> immediately following a <p>Thinking...</p>. Extract the
-                //   blockquote text, then remove both elements from the clone.
-                //
-                // Also normalise all remaining MarkdownCodeBlock_containers into standard
-                // <pre><code> elements so markdownify can produce proper fenced blocks.
+            // ── helpers ──────────────────────────────────────────────────────
+            // Extract reasoning text from a blockquote, preserving paragraph breaks.
+            // bq.innerText collapses <p> separators; join with double newlines instead.
+            function bqToText(bq) {
+                const ps = bq.querySelectorAll('p');
+                if (ps.length > 0)
+                    return Array.from(ps).map(p => p.innerText.trim()).filter(t => t).join('\\n\\n');
+                return bq.innerText.trim();
+            }
+
+            // Extract structured data from a single Message_row element.
+            // Three reasoning trace formats exist in Poe:
+            //
+            // Format A — NISHA-style: reasoning is a MarkdownCodeBlock_container
+            //   with language label "thoughts". Strip it.
+            //
+            // Format B — "Thinking..." (extended thinking models): reasoning is a
+            //   <blockquote> immediately following a <p>Thinking...</p>. Extract the
+            //   blockquote text, then remove both elements from the clone.
+            //
+            // Format C — MarkdownThinkingBlock (new Poe UI): a div[MarkdownThinkingBlock_root]
+            //   inside markdownContainer wraps a toggle button and a
+            //   <blockquote[MarkdownThinkingBlock_content]>. Extract the blockquote,
+            //   then remove the whole block from the clone.
+            //
+            // Also normalise all remaining MarkdownCodeBlock_containers into standard
+            // <pre><code> elements so markdownify can produce proper fenced blocks.
+            function extractMessage(el) {
                 const mainMdEl = el.querySelector('[class*="markdownContainer"]');
                 let contentHtml = null;
                 let thinkingText = null;
+
                 if (mainMdEl) {
                     const clone = mainMdEl.cloneNode(true);
 
@@ -77,13 +102,26 @@ async def scrape_url(url: str) -> dict:
                     if (prose) {
                         const firstEl = prose.firstElementChild;
                         if (firstEl && firstEl.tagName === 'P' &&
-                            firstEl.innerText.trim() === 'Thinking...') {
+                            /^Thinking\\.{0,3}$/.test(firstEl.innerText.trim())) {
                             firstEl.remove();
                             const bq = prose.firstElementChild;
                             if (bq && bq.tagName === 'BLOCKQUOTE') {
-                                thinkingText = bq.innerText.trim();
+                                thinkingText = bqToText(bq);
                                 bq.remove();
                             }
+                            // No blockquote = label-only format; "Thinking" removed, thinkingText stays null
+                        }
+                    }
+
+                    // Format C: MarkdownThinkingBlock (new Poe auto-collapsed UI).
+                    // A div[class*="MarkdownThinkingBlock_root"] wraps a toggle button and a
+                    // <blockquote class*="MarkdownThinkingBlock_content"> — all inside markdownContainer.
+                    if (!thinkingText) {
+                        const thinkingBlock = clone.querySelector('[class*="MarkdownThinkingBlock_root"]');
+                        if (thinkingBlock) {
+                            const bq = thinkingBlock.querySelector('blockquote');
+                            if (bq) thinkingText = bqToText(bq);
+                            thinkingBlock.remove();
                         }
                     }
 
@@ -100,7 +138,7 @@ async def scrape_url(url: str) -> dict:
                         const codeText = preTag ? preTag.innerText : '';
                         const pre = document.createElement('pre');
                         const code = document.createElement('code');
-                        if (lang) code.setAttribute('class', `language-${lang}`);
+                        if (lang) code.setAttribute('class', 'language-' + lang);
                         code.textContent = codeText;
                         pre.appendChild(code);
                         block.parentNode.replaceChild(pre, block);
@@ -115,6 +153,7 @@ async def scrape_url(url: str) -> dict:
 
                     contentHtml = clone.innerHTML;
                 }
+
                 // Capture attached images (user uploads live outside markdownContainer)
                 const images = [];
                 el.querySelectorAll('[class*="Attachments"] img, [class*="attachment"] img').forEach(img => {
@@ -124,10 +163,41 @@ async def scrape_url(url: str) -> dict:
                 });
 
                 const isHuman = Array.from(el.classList).some(c => /right/i.test(c));
-                messages.push({ text: el.innerText.trim(), contentHtml, thinkingText, images, isHuman });
-            });
+                return { itemType: 'message', text: el.innerText.trim(), contentHtml, thinkingText, images, isHuman };
+            }
 
-            // Attempt to extract bot name
+            // ── main: walk tupleGroupContainer elements in DOM order ─────────────
+            // Poe groups messages by date inside ShareMessageList_tupleGroupContainer
+            // divs. Each group starts with a MessageDate_container pill (the date label),
+            // followed by ShareMessage_wrapper elements for each message turn.
+            const groups = document.querySelectorAll('[class*="tupleGroupContainer"]');
+            const items = [];
+
+            for (const group of Array.from(groups)) {
+                // Date label — the pill at the top of each date group
+                const datePill = group.querySelector('[class*="MessageDate_container"]');
+                if (datePill) {
+                    const label = (datePill.innerText || '').trim();
+                    if (label) items.push({ itemType: 'date', label });
+                }
+
+                // Messages — direct ShareMessage_wrapper children of this group
+                for (const child of Array.from(group.children)) {
+                    const childClasses = Array.from(child.classList).join(' ');
+                    if (!/ShareMessage_wrapper/i.test(childClasses)) continue;
+                    const row = child.querySelector('[class*="Message_row"]:not([class*="WithFooter"])');
+                    if (row) items.push(extractMessage(row));
+                }
+            }
+
+            // Fallback: if tupleGroupContainer wasn't found, collect messages without dates
+            if (items.length === 0) {
+                document.querySelectorAll('[class*="Message_row"]:not([class*="WithFooter"])').forEach(row => {
+                    items.push(extractMessage(row));
+                });
+            }
+
+            // ── bot name ──────────────────────────────────────────────────────
             // Strategy 1: look for "BotName · HH:MM" pattern near the top of the page
             // (Poe shared pages show this in the conversation header)
             let botName = null;
@@ -153,7 +223,7 @@ async def scrape_url(url: str) -> dict:
                 }
             }
 
-            return { messages, botName: botName || 'Bot' };
+            return { items, botName: botName || 'Bot' };
         }""")
 
             return result
@@ -243,38 +313,54 @@ def _to_markdown(content_html: str | None, fallback_text: str) -> str:
     return fallback_text.strip()
 
 
-def parse_messages(raw_messages: list[dict], opts: dict) -> list[dict]:
+def parse_messages(raw_items: list[dict], opts: dict) -> list[dict]:
     """
-    Deduplicate, assign roles, and extract structured fields from raw message dicts.
+    Process raw items from the scraper (messages + date separators) into a mixed list
+    of parsed message dicts and date-event dicts.
+
+    Date events pass through as {"type": "date", "label": "..."}.
+    Messages are deduplicated, have roles assigned, and have structured fields extracted.
 
     opts keys: no_thoughts (bool), no_sources (bool), time_fmt (str)
     """
-    # Deduplicate by text content — preserve order of first appearance
-    seen = set()
-    deduped = []
-    for msg in raw_messages:
-        key = msg.get("text", "")
+    # First pass: deduplicate messages by text content (first occurrence wins).
+    # Date items are not subject to dedup.
+    seen: set[str] = set()
+    keep_ids: set[int] = set()
+    for item in raw_items:
+        if item.get("itemType") != "message":
+            continue
+        key = item.get("text", "")
         if key and key not in seen:
             seen.add(key)
-            deduped.append(msg)
+            keep_ids.add(id(item))
 
-    parsed = []
-    for i, msg in enumerate(deduped):
+    result: list[dict] = []
+    msg_idx = 0  # index among kept messages only — for fallback role assignment
+
+    for item in raw_items:
+        if item.get("itemType") == "date":
+            result.append({"type": "date", "label": item["label"]})
+            continue
+
+        if id(item) not in keep_ids:
+            continue
+
         # Use the isHuman flag scraped from the DOM class name.
         # Fall back to index parity for JSON imports that predate this field.
-        if "isHuman" in msg:
-            role = "user" if msg["isHuman"] else "bot"
+        if "isHuman" in item:
+            role = "user" if item["isHuman"] else "bot"
         else:
-            role = "user" if i % 2 == 0 else "bot"
+            role = "user" if msg_idx % 2 == 0 else "bot"
 
-        text = msg.get("text", "")
-        content_html = msg.get("contentHtml")
+        text = item.get("text", "")
+        content_html = item.get("contentHtml")
 
         text, timestamp = _extract_timestamp(text)
 
         if role == "bot":
             text, sources = _extract_sources(text)
-            thinking_text = msg.get("thinkingText")
+            thinking_text = item.get("thinkingText")
             if thinking_text is not None:
                 # Format B: "Thinking..." — reasoning already extracted and removed
                 # from contentHtml in JS; plain_content fallback is the full innerText
@@ -294,17 +380,22 @@ def parse_messages(raw_messages: list[dict], opts: dict) -> list[dict]:
 
         # Strip Poe UI artefacts that leak into innerText
         content = re.sub(r'\n*\bView more\b\n*', '', content).strip()
+        # Strip bare "Thinking" / "Thinking..." label that leaks when Poe emits no blockquote
+        if role == "bot":
+            content = re.sub(r'^Thinking\.{0,3}\s*\n+', '', content).strip()
 
-        parsed.append({
+        result.append({
+            "type": "message",
             "role": role,
             "content": content,
             "reasoning": thoughts,
             "sources": sources,
             "timestamp": timestamp,
-            "images": msg.get("images") or [],
+            "images": item.get("images") or [],
         })
+        msg_idx += 1
 
-    return parsed
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -337,7 +428,15 @@ def format_md(messages: list[dict], meta: dict, opts: dict) -> str:
         "",
     ]
 
-    for msg in messages:
+    for item in messages:
+        if item.get("type") == "date":
+            lines.append(f"🗓 **{item['label']}**")
+            lines.append("")
+            lines.append("---")
+            lines.append("")
+            continue
+
+        msg = item
         author = meta["user_name"] if msg["role"] == "user" else meta["bot_name"]
         ts = format_timestamp(msg["timestamp"], opts["time_fmt"])
         lines.append(f"### ❯ {author}" + (f" · {ts}" if ts else ""))
@@ -350,7 +449,7 @@ def format_md(messages: list[dict], meta: dict, opts: dict) -> str:
             lines.append("")
 
         if msg["role"] == "bot" and msg.get("reasoning") and not opts["no_thoughts"]:
-            lines.append("> **Reasoning**")
+            lines.append("> **Thinking...**")
             for thought_line in msg["reasoning"].splitlines():
                 lines.append(f"> {thought_line}" if thought_line.strip() else ">")
             lines.append("")
@@ -376,13 +475,17 @@ def format_md(messages: list[dict], meta: dict, opts: dict) -> str:
 
 def format_json(messages: list[dict], meta: dict, opts: dict) -> str:
     output_messages = []
-    for msg in messages:
+    for item in messages:
+        if item.get("type") == "date":
+            output_messages.append({"type": "date", "label": item["label"]})
+            continue
+        msg = item
         output_messages.append({
             "role": msg["role"],
             "author": meta["user_name"] if msg["role"] == "user" else meta["bot_name"],
             "timestamp": format_timestamp(msg["timestamp"], opts["time_fmt"]) or None,
-            "content": msg["content"],
             "reasoning": None if opts["no_thoughts"] else msg.get("reasoning"),
+            "content": msg["content"],
             "sources": [] if opts["no_sources"] else msg.get("sources", []),
             "images": [img.get("alt") or img.get("src", "").split("/")[-1].split("?")[0] for img in msg.get("images", [])],
         })
@@ -525,7 +628,14 @@ def format_html(messages: list[dict], meta: dict, opts: dict, template: str = "d
     url_safe = html_lib.escape(meta["url"])
 
     msg_blocks = []
-    for msg in messages:
+    for item in messages:
+        if item.get("type") == "date":
+            msg_blocks.append(
+                f'<div class="date-sep"><span>{html_lib.escape(item["label"])}</span></div>\n'
+            )
+            continue
+
+        msg = item
         role = msg["role"]
         ts = format_timestamp(msg["timestamp"], opts["time_fmt"])
 
@@ -562,8 +672,10 @@ def format_html(messages: list[dict], meta: dict, opts: dict, template: str = "d
                 body_parts.append(
                     f'<details class="thoughts">'
                     f'<summary>'
-                    f'<span class="thoughts-chevron">▶</span>'
-                    f'<span>thoughts</span>'
+                    f'<span>Thinking</span>'
+                    f'<svg class="thoughts-chevron" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24">'
+                    f'<path fill="currentColor" d="M9.29 6.71a.996.996 0 0 0 0 1.41L13.17 12l-3.88 3.88a.996.996 0 1 0 1.41 1.41l4.59-4.59a.996.996 0 0 0 0-1.41L10.7 6.71a.996.996 0 0 0-1.41 0z"/>'
+                    f'</svg>'
                     f'</summary>'
                     f'<div class="thoughts-body">{thoughts_escaped}</div>'
                     f'</details>'
@@ -636,9 +748,13 @@ def load_json_export(path: str, bot_name_override: str | None, user_name: str) -
 
     messages = []
     for msg in data.get("messages", []):
+        if msg.get("type") == "date":
+            messages.append({"type": "date", "label": msg.get("label", "")})
+            continue
         # JSON export stores images as plain filename strings; reconstruct for the HTML renderer
         images = [{"src": "", "alt": img} for img in msg.get("images") or []]
         messages.append({
+            "type": "message",
             "role": msg.get("role", "bot"),
             "content": msg.get("content", ""),
             "reasoning": msg.get("reasoning"),
@@ -673,8 +789,8 @@ _EXT = {"md": ".md", "json": ".json", "html": ".html"}
               show_default=True, help="Timestamp format.")
 @click.option("--no-thoughts", "no_thoughts", is_flag=True, default=False,
               help="Exclude AI reasoning traces from output.")
-@click.option("--sources", "no_sources", is_flag=True, default=True,
-              help="Include 'Learn more' source links in output (excluded by default).")
+@click.option("--no-sources", "no_sources", is_flag=True, default=False,
+              help="Exclude 'Learn more' source links from output.")
 @click.option("--template", "html_template", default=None,
               help="HTML template name (in templates/) or path to a .html file. Only used with -f html. Defaults to 'default'.")
 def cli(urls, fmt, output_stem, user_name, bot_name_override, time_fmt,
@@ -740,9 +856,9 @@ def cli(urls, fmt, output_stem, user_name, bot_name_override, time_fmt,
                 "user_name": user_name,
             }
 
-            messages = parse_messages(raw.get("messages", []), opts)
+            messages = parse_messages(raw.get("items", []), opts)
 
-        if not messages:
+        if not any(item.get("type") == "message" for item in messages):
             click.echo(f"  Error: no messages found — is this a valid shared conversation link?", err=True)
             continue
 

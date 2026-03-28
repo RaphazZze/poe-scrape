@@ -32,7 +32,7 @@ python poe_scrape.py [OPTIONS] URLS...
 | `--bot-name` | *(scraped from page)* | Override the bot display name |
 | `--time` | `12h` | Timestamp format: `12h` or `24h` |
 | `--no-thoughts` | off | Exclude AI reasoning traces |
-| `--sources` | off | Include "Learn more" source links (excluded by default) |
+| `--no-sources` | off | Exclude "Learn more" source links from output |
 | `--template` | `default` | HTML template name (in `templates/`) or path to a `.html` file. Only used with `-f html` |
 
 ---
@@ -89,13 +89,14 @@ python poe_scrape.py *.json -f html --template light
 
 ## Output Formats
 
-**Markdown (`.md`)** — Clean, readable format. Reasoning traces rendered as blockquotes. Image attachments shown as `📎 filename` references. Works great in Obsidian, Notion imports, or plain text editors.
+**Markdown (`.md`)** — Clean, readable format. Date separators rendered as `🗓 **Mar 10**` with a horizontal rule. Reasoning traces rendered as blockquotes. Image attachments shown as `📎 filename` references. Works great in Obsidian, Notion imports, or plain text editors.
 
-**JSON (`.json`)** — Fully structured data with all fields: `role`, `author`, `timestamp`, `content`, `reasoning`, `sources`, `images`. Useful for further processing or archiving.
+**JSON (`.json`)** — Fully structured data. Regular messages have fields: `role`, `author`, `timestamp`, `content`, `reasoning`, `sources`, `images`. Date separators appear inline as `{"type": "date", "label": "Mar 10"}`. Useful for further processing or archiving.
 
 **HTML (`.html`)** — Self-contained file with no external dependencies. Themeable chat UI:
 - User messages: right-aligned bubbles
 - Bot messages: left-aligned bubbles with avatar and name above
+- Date separators: centered pill dividers between message groups
 - Reasoning traces: collapsible "thoughts" block styled like a code block
 - All Markdown rendered: headings, bold, italic, strikethrough, lists, nested lists, task list checkboxes, tables, blockquotes, inline code, fenced code blocks, horizontal rules, footnotes, hyperlinks
 - Horizontal scrolling on wide tables
@@ -149,5 +150,5 @@ Templates are fully self-contained — open them directly in a browser to previe
 - The scraper waits 6 seconds after page load for Poe's SPA to finish rendering. On slow connections this may need to be increased (edit `wait_for_timeout(6000)` in `scrape_url`).
 - Bot name is detected from the page body. Use `--bot-name` to override if detection is incorrect.
 - Emojis and all Unicode characters are preserved throughout (UTF-8 output).
-- Two reasoning trace formats are supported: the "thoughts" code block style and the extended thinking blockquote style.
+- Three reasoning trace formats are supported: the "thoughts" code block style, the extended thinking blockquote style, and the MarkdownThinkingBlock toggle UI.
 - JSON exports can be reconverted to any other format at any time by passing the `.json` file as input instead of a URL. Image attachments are stored as filename references only — original URLs point to Poe's CDN and are not accessible outside Poe.
