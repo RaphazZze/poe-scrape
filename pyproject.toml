@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "poe-scrape"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "playwright>=1.50.0",
+    "click>=8.0.0",
+    "markdown>=3.5.0",
+    "markdownify>=0.11.0",
+    "pygments>=2.0.0",
+    "jinja2>=3.0.0",
+]
+
+[tool.setuptools]
+py-modules = ["poe_scrape"]
+
+[project.scripts]
+poe-scrape = "poe_scrape:cli"
