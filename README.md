@@ -156,5 +156,5 @@ Templates are fully self-contained — open them directly in a browser to previe
 - The scraper waits 6 seconds after page load for Poe's SPA to finish rendering. On slow connections this may need to be increased (edit `wait_for_timeout(6000)` in `scrape_url`).
 - Bot name is detected from the page body. Use `--bot-name` to override if detection is incorrect.
 - Emojis and all Unicode characters are preserved throughout (UTF-8 output).
-- Four reasoning trace formats are supported: the `thoughts`-labelled code block style, the `markdown`-labelled code block style (some NSH variants), the extended thinking blockquote style, and the MarkdownThinkingBlock toggle UI.
+- Four reasoning trace formats are supported: leading code block style (NSH-style bots, any language label), the extended thinking blockquote style, and the MarkdownThinkingBlock toggle UI.
 - JSON exports can be reconverted to any other format at any time by passing the `.json` file as input instead of a URL. Image attachments are stored as filename references only — original URLs point to Poe's CDN and are not accessible outside Poe.

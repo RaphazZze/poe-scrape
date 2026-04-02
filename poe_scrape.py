@@ -125,20 +125,15 @@ async def scrape_url(url: str) -> dict:
                         }
                     }
 
-                    // Format A (variant): first code block has language "markdown" instead of "thoughts".
-                    // Some NSH-style bots label their thinking block "markdown".
-                    // Only extract it if it is the very first element in the clone (no prose before it).
+                    // Format A (variant): NSH-style bots always put their thinking block first.
+                    // Extract it regardless of language label for retro-compatibility.
                     if (!thinkingText) {
                         const firstBlock = clone.querySelector('[class*="MarkdownCodeBlock_container"]');
                         if (firstBlock && firstBlock === clone.firstElementChild) {
-                            const langLabel = firstBlock.querySelector('[class*="languageName"]');
-                            const lang = langLabel ? langLabel.innerText.trim().toLowerCase() : '';
-                            if (lang === 'markdown') {
-                                const preTag = firstBlock.querySelector('[class*="preTag"]');
-                                if (preTag) {
-                                    thinkingText = preTag.innerText.trim();
-                                    firstBlock.remove();
-                                }
+                            const preTag = firstBlock.querySelector('[class*="preTag"]');
+                            if (preTag) {
+                                thinkingText = preTag.innerText.trim();
+                                firstBlock.remove();
                             }
                         }
                     }
@@ -293,7 +288,7 @@ def _extract_thoughts(text: str) -> tuple[str, str | None]:
 
 
 _LEADING_FENCED_THOUGHTS_RE = re.compile(
-    r'^```(?:thoughts|markdown)\n(.*?)\n```[ \t]*\n(.*)',
+    r'^```[^\n]*\n(.*?)\n```[ \t]*\n(.*)',
     re.DOTALL,
 )
 
