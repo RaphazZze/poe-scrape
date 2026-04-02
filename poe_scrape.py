@@ -75,7 +75,7 @@ async def scrape_url(url: str) -> dict:
             // Extract structured data from a single Message_row element.
             // Three reasoning trace formats exist in Poe:
             //
-            // Format A — NISHA-style: reasoning is a MarkdownCodeBlock_container
+            // Format A — NSH-style: reasoning is a MarkdownCodeBlock_container
             //   with language label "thoughts". Strip it.
             //
             // Format B — "Thinking..." (extended thinking models): reasoning is a
@@ -122,6 +122,24 @@ async def scrape_url(url: str) -> dict:
                             const bq = thinkingBlock.querySelector('blockquote');
                             if (bq) thinkingText = bqToText(bq);
                             thinkingBlock.remove();
+                        }
+                    }
+
+                    // Format A (variant): first code block has language "markdown" instead of "thoughts".
+                    // Some NSH-style bots label their thinking block "markdown".
+                    // Only extract it if it is the very first element in the clone (no prose before it).
+                    if (!thinkingText) {
+                        const firstBlock = clone.querySelector('[class*="MarkdownCodeBlock_container"]');
+                        if (firstBlock && firstBlock === clone.firstElementChild) {
+                            const langLabel = firstBlock.querySelector('[class*="languageName"]');
+                            const lang = langLabel ? langLabel.innerText.trim().toLowerCase() : '';
+                            if (lang === 'markdown') {
+                                const preTag = firstBlock.querySelector('[class*="preTag"]');
+                                if (preTag) {
+                                    thinkingText = preTag.innerText.trim();
+                                    firstBlock.remove();
+                                }
+                            }
                         }
                     }
 
@@ -274,6 +292,12 @@ def _extract_thoughts(text: str) -> tuple[str, str | None]:
     return text, None
 
 
+_LEADING_FENCED_THOUGHTS_RE = re.compile(
+    r'^```(?:thoughts|markdown)\n(.*?)\n```[ \t]*\n(.*)',
+    re.DOTALL,
+)
+
+
 _PRE_CODE_RE = re.compile(
     r'<pre><code(?:\s+class="(?:language-)?([^"]*)")?>(.*?)</code></pre>',
     re.DOTALL,
@@ -373,6 +397,15 @@ def parse_messages(raw_items: list[dict], opts: dict) -> list[dict]:
             content = _to_markdown(content_html, plain_content)
             # Strip sources from markdownified content too (they may appear as links)
             content, _ = _extract_sources(content)
+            # Fallback: if no thinking was detected above but content starts with a
+            # fenced ```thoughts``` or ```markdown``` block, extract it as reasoning.
+            # This catches NSH-style bots where the JS heuristic couldn't fire
+            # (e.g. the thinking block wasn't the direct first child in the DOM).
+            if not thoughts:
+                m = _LEADING_FENCED_THOUGHTS_RE.match(content)
+                if m:
+                    thoughts = m.group(1).strip()
+                    content = m.group(2).strip()
         else:
             sources = []
             thoughts = None

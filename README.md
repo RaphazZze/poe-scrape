@@ -10,8 +10,14 @@ No AI/LLM calls — purely programmatic Playwright DOM scraping.
 ## Install
 
 ```bash
-pip install -r requirements.txt
+pipx install .
 playwright install chromium
+```
+
+To update after making changes to the source:
+
+```bash
+pipx install . --force
 ```
 
 ---
@@ -19,7 +25,7 @@ playwright install chromium
 ## Usage
 
 ```
-python poe_scrape.py [OPTIONS] URLS...
+poe-scrape [OPTIONS] URLS...
 ```
 
 ### Options
@@ -41,48 +47,48 @@ python poe_scrape.py [OPTIONS] URLS...
 
 **Basic Markdown export:**
 ```bash
-python poe_scrape.py https://poe.com/s/eaRlHYDcMzrgKUOQ66xR
+poe-scrape https://poe.com/s/eaRlHYDcMzrgKUOQ66xR
 # → poe_2026-03-14.md
 ```
 
 **HTML export with a custom filename:**
 ```bash
-python poe_scrape.py https://poe.com/s/abc123 -f html -o my_chat
+poe-scrape https://poe.com/s/abc123 -f html -o my_chat
 # → my_chat.html
 ```
 
 **HTML export with the light theme:**
 ```bash
-python poe_scrape.py https://poe.com/s/abc123 -f html --template light
+poe-scrape https://poe.com/s/abc123 -f html --template light
 ```
 
 **Batch export to JSON, without reasoning traces:**
 ```bash
-python poe_scrape.py https://poe.com/s/abc https://poe.com/s/def \
+poe-scrape https://poe.com/s/abc https://poe.com/s/def \
   -f json --no-thoughts -o session
 # → session_1.json, session_2.json
 ```
 
 **24-hour timestamps, custom speaker names:**
 ```bash
-python poe_scrape.py https://poe.com/s/abc \
-  --user "Raph" --bot-name "NISHA" --time 24h
+poe-scrape https://poe.com/s/abc \
+  --user "Raph" --bot-name "NSH" --time 24h
 ```
 
 **Convert a JSON export to HTML:**
 ```bash
-python poe_scrape.py my_convo.json -f html
+poe-scrape my_convo.json -f html
 # → my_convo.html (default dark template)
 ```
 
 **Reconvert a JSON export with a different template:**
 ```bash
-python poe_scrape.py my_convo.json -f html --template harajuku
+poe-scrape my_convo.json -f html --template harajuku
 ```
 
 **Batch reconvert all JSON exports:**
 ```bash
-python poe_scrape.py *.json -f html --template light
+poe-scrape *.json -f html --template light
 ```
 
 ---
@@ -119,12 +125,12 @@ Templates are `.html` files in the `templates/` directory using [Jinja2](https:/
 
 **Using a built-in template:**
 ```bash
-python poe_scrape.py https://poe.com/s/abc123 -f html --template harajuku
+poe-scrape https://poe.com/s/abc123 -f html --template harajuku
 ```
 
 **Using a custom template file:**
 ```bash
-python poe_scrape.py https://poe.com/s/abc123 -f html --template /path/to/my_theme.html
+poe-scrape https://poe.com/s/abc123 -f html --template /path/to/my_theme.html
 ```
 
 ### Creating a custom template
@@ -150,5 +156,5 @@ Templates are fully self-contained — open them directly in a browser to previe
 - The scraper waits 6 seconds after page load for Poe's SPA to finish rendering. On slow connections this may need to be increased (edit `wait_for_timeout(6000)` in `scrape_url`).
 - Bot name is detected from the page body. Use `--bot-name` to override if detection is incorrect.
 - Emojis and all Unicode characters are preserved throughout (UTF-8 output).
-- Three reasoning trace formats are supported: the "thoughts" code block style, the extended thinking blockquote style, and the MarkdownThinkingBlock toggle UI.
+- Four reasoning trace formats are supported: the `thoughts`-labelled code block style, the `markdown`-labelled code block style (some NSH variants), the extended thinking blockquote style, and the MarkdownThinkingBlock toggle UI.
 - JSON exports can be reconverted to any other format at any time by passing the `.json` file as input instead of a URL. Image attachments are stored as filename references only — original URLs point to Poe's CDN and are not accessible outside Poe.
