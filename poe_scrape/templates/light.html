@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ bot_name }} — Poe</title>
+<style>
+    :root {
+        --bg:            #ffffff;
+        --header-bg:     #f5f5f7;
+        --text:          #1c1c1e;
+        --text-body:     #3a3a3c;
+        --muted:         #8e8e93;
+        --accent:        #5e5ce6;
+        --user-bubble:   #5e5ce6;
+        --user-text:     #ffffff;
+        --code-border:   #d1d1d6;
+        --code-header:   #e9e9ee;
+        --code-body:     #f8f8fa;
+        --avatar-bg:     #e5e5ea;
+        --avatar-border: #c7c7cc;
+        --mono: "SF Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+        font-size: 1rem;
+        line-height: 1.5rem;
+        font-weight: 400;
+        font-stretch: normal;
+        word-break: break-word;
+    }
+    /* ── Header ── */
+    header {
+        position: sticky; top: 0; z-index: 10;
+        background: var(--header-bg);
+        border-bottom: 1px solid #d1d1d6;
+        padding: 13px 24px;
+        display: flex; align-items: center; gap: 12px;
+    }
+    .header-avatar {
+        width: 34px; height: 34px; border-radius: 50%;
+        background: var(--avatar-bg);
+        border: 1px solid var(--avatar-border);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 13px; font-weight: 700; color: var(--text);
+        flex-shrink: 0;
+    }
+    .header-info { display: flex; flex-direction: column; gap: 2px; }
+    .header-botname { font-size: 15px; font-weight: 600; }
+    .header-sub { font-size: 12px; color: var(--muted); }
+    .header-sub a { color: var(--muted); text-decoration: none; }
+    .header-sub a:hover { text-decoration: underline; }
+    /* ── Layout ── */
+    .container { max-width: 820px; margin: 0 auto; padding: 36px 20px 80px; }
+    /* ── Message rows ── */
+    .msg { margin-bottom: 28px; }
+    .date-sep { display: flex; justify-content: center; margin: 4px 0 20px; }
+    .date-sep span { background: var(--avatar-bg); color: var(--muted); font-size: 12px; font-weight: 500; padding: 4px 14px; border-radius: 99px; letter-spacing: 0.01em; }
+    .msg-user { display: flex; justify-content: flex-end; }
+    .msg-bot  { display: flex; justify-content: flex-start; }
+    /* ── Bot wrapper: label row above bubble ── */
+    .bot-wrapper { display: flex; flex-direction: column; gap: 6px; max-width: 100%; min-width: 0; }
+    .bot-label-row { display: flex; align-items: center; gap: 8px; padding-left: 2px; }
+    /* ── Avatar ── */
+    .avatar {
+        width: 28px; height: 28px; border-radius: 50%;
+        background: var(--avatar-bg);
+        border: 1px solid var(--avatar-border);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 12px; font-weight: 700; color: var(--text);
+        flex-shrink: 0;
+    }
+    /* ── User bubble ── */
+    .user-bubble {
+        background: var(--user-bubble);
+        color: var(--user-text);
+        padding: 12px 16px 3px;
+        border-radius: 18px;
+        max-width: 94%;
+        word-wrap: break-word;
+    }
+    .user-bubble p { margin: 0.75em 0; }
+    .user-bubble p:first-child { margin-top: 0; }
+    .user-bubble p:last-child  { margin-bottom: 0; }
+    .user-bubble blockquote {
+        border-left: 3px solid rgba(255,255,255,0.4);
+        margin: 1.2em 0;
+        padding: 0.5em 0 0.5em 1em;
+    }
+    .user-bubble .bot-body blockquote { color: inherit; }
+    .user-bubble .ts {
+        display: block;
+        text-align: right;
+        font-size: 11px;
+        color: rgba(255,255,255,0.65);
+        margin-top: 3px;
+    }
+    /* ── Image attachment placeholders ── */
+    .img-attachments { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+    .img-chip {
+        display: inline-flex; align-items: center; gap: 7px;
+        background: rgba(255,255,255,0.2);
+        border: 1px solid rgba(255,255,255,0.35);
+        border-radius: 8px;
+        padding: 6px 11px;
+        font-size: 12px;
+        color: rgba(255,255,255,0.9);
+        font-family: var(--mono);
+        max-width: 260px;
+        overflow: hidden;
+    }
+    .img-chip-icon { font-size: 14px; flex-shrink: 0; }
+    .img-chip-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* ── Bot content (light bubble) ── */
+    .bot-content {
+        flex: 1; min-width: 0;
+        background: var(--header-bg);
+        border: 1px solid #d1d1d6;
+        border-radius: 18px;
+        padding: 14px 18px 4px;
+    }
+    .bot-name { font-size: 15px; font-weight: 400; color: var(--text); }
+    .bot-ts-bottom {
+        display: block;
+        text-align: right;
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 4px;
+    }
+    .bot-body { color: var(--text-body); }
+    .bot-body p { margin: 0.85em 0; }
+    .bot-body p:first-child { margin-top: 0; }
+    .bot-body p:last-child  { margin-bottom: 0; }
+    .bot-body ul, .bot-body ol { padding-left: 1.6em; margin: 0.55em 0 0.9em; }
+    .bot-body li { margin: 0.45em 0; }
+    .bot-body h1 { font-size: 1.65em; font-weight: 700; color: var(--text); margin: 1.4em 0 0.35em; line-height: 1.3; }
+    .bot-body h2 { font-size: 1.4em; font-weight: 700; color: var(--text); margin: 1.3em 0 0.35em; line-height: 1.3; }
+    .bot-body h3 { font-size: 1.2em; font-weight: 700; color: var(--text); margin: 1.2em 0 0.3em; line-height: 1.3; }
+    .bot-body h4 { font-size: 1.08em; font-weight: 700; color: #6e6e73; margin: 1.1em 0 0.3em; }
+    .bot-body strong { font-weight: 700; color: var(--text); }
+    .bot-body em { font-style: italic; }
+    .bot-body a { color: var(--accent); text-decoration: none; }
+    .bot-body a:hover { text-decoration: underline; }
+    .bot-body del { text-decoration: line-through; opacity: 0.55; }
+    .bot-body hr { border: none; border-top: 1px solid #d1d1d6; margin: 1.8em 0; }
+    .bot-body sup { font-size: 0.72em; vertical-align: super; line-height: 0; color: var(--accent); }
+    /* Task list checkboxes */
+    .cb {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 15px; height: 15px; border-radius: 3px;
+        font-size: 10px; font-weight: 700;
+        vertical-align: middle; margin-right: 5px; flex-shrink: 0;
+    }
+    .cb-off { border: 1.5px solid #c7c7cc; }
+    .cb-on  { background: var(--accent); border: 1.5px solid var(--accent); color: #fff; }
+    /* Footnotes */
+    .bot-body .footnotes { margin-top: 1.2em; font-size: 0.85em; color: var(--muted); }
+    .bot-body .footnotes hr { margin: 0.6em 0; }
+    .bot-body .footnotes ol { padding-left: 1.4em; }
+    .bot-body .footnotes li { margin: 0.3em 0; }
+    .bot-body sup a { color: var(--accent); text-decoration: none; font-size: 0.75em; }
+    .bot-body blockquote {
+        border-left: 3px solid #c7c7cc;
+        margin: 1.2em 0;
+        padding: 0.5em 0 0.5em 1em;
+        color: var(--text-body);
+    }
+    /* Inline code */
+    .bot-body code {
+        font-family: var(--mono);
+        font-size: 0.87em;
+        background: #ededf0;
+        border: 1px solid #d1d1d6;
+        padding: 1px 6px;
+        border-radius: 4px;
+        color: #c0392b;
+    }
+    /* Tables */
+    .bot-body .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 1.2em 0; }
+    .bot-body table { border-collapse: collapse; width: auto; margin: 0; font-size: 0.9em; line-height: 1.3; }
+    .bot-body th, .bot-body td {
+        padding: 8px 24px 8px 0;
+        text-align: left;
+        vertical-align: top;
+        border: none;
+        border-bottom: 1px solid #d1d1d6;
+        min-width: 128px;
+    }
+    .bot-body th {
+        font-weight: 700;
+        color: var(--text);
+        padding-bottom: 14px;
+        border-bottom: 2px solid #c7c7cc;
+    }
+    .bot-body td { color: var(--text-body); }
+    /* ── Code block ── */
+    .code-block {
+        border: 1px solid var(--code-border);
+        border-radius: 10px;
+        margin: 0.85em 0;
+        overflow: hidden;
+    }
+    .code-block-header {
+        background: var(--code-header);
+        padding: 7px 10px 7px 14px;
+        font-family: var(--mono);
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--muted);
+        border-bottom: 1px solid var(--code-border);
+        user-select: none;
+        display: flex; align-items: center; justify-content: space-between;
+    }
+    .code-copy-btn {
+        background: rgba(0,0,0,0.05); border: none; border-radius: 6px;
+        color: rgba(0,0,0,0.4); padding: 5px; cursor: pointer;
+        display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+        transition: background 0.15s, color 0.15s;
+    }
+    .code-copy-btn:hover { background: rgba(0,0,0,0.1); color: #1c1c1e; }
+    .code-block pre {
+        margin: 0; padding: 0; border: none; border-radius: 0; background: none;
+    }
+    .code-block pre code {
+        display: block;
+        background: var(--code-body);
+        padding: 14px 16px;
+        border: none;
+        border-radius: 0;
+        color: var(--text);
+        font-size: 14px;
+        line-height: 1.55;
+        overflow-x: auto;
+        white-space: pre;
+    }
+    /* Pygments highlighted blocks */
+    .code-block pre.highlight { background: var(--code-body); padding: 14px 16px; }
+    .code-block pre.highlight code { background: none; padding: 0; display: block; overflow-x: auto; white-space: pre; }
+    .highlight { background: var(--code-body) !important; }
+    /* ── Thoughts block (Poe-style collapsible pill) ── */
+    details.thoughts { margin-bottom: 14px; }
+    details.thoughts summary {
+        display: inline-flex; align-items: center; gap: 6px;
+        background: none;
+        border: none;
+        border-radius: 0;
+        padding: 0;
+        cursor: pointer; user-select: none; list-style: none;
+        font-size: 1rem; font-weight: 700;
+        color: var(--text);
+    }
+    details.thoughts summary:hover { opacity: 0.8; }
+    details.thoughts[open] summary { margin-bottom: 10px; }
+    details.thoughts summary::-webkit-details-marker { display: none; }
+    .thoughts-chevron { display: inline-block; flex: none; transition: transform 0.2s; }
+    details.thoughts[open] .thoughts-chevron { transform: rotate(90deg); }
+    .thoughts-body {
+        border-left: 3px solid var(--code-border);
+        padding: 2px 0 2px 14px;
+        font-size: 14px;
+        color: #555557;
+        line-height: 1.6;
+    }
+    /* ── Copy toast ── */
+    #copy-toast {
+        position: fixed; top: 70px; left: 50%; transform: translateX(-50%);
+        background: #1c1c1e; color: #f5f5f7;
+        padding: 8px 18px; border-radius: 20px;
+        font-size: 13px; font-weight: 500;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+        opacity: 0; pointer-events: none;
+        transition: opacity 0.15s ease;
+        z-index: 100;
+        white-space: nowrap;
+    }
+    #copy-toast.show { opacity: 1; }
+    /* ── Sources ── */
+    .sources {
+        margin-top: 14px; padding-top: 12px;
+        border-top: 1px solid #d1d1d6;
+        font-size: 1rem; color: var(--muted);
+    }
+    .sources a { color: var(--accent); text-decoration: none; }
+    .sources a:hover { text-decoration: underline; }
+    .sources strong { display: block; margin-bottom: 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+    .sources ul { padding-left: 1.2em; }
+    .sources li { margin: 3px 0; }
+
+    /* ── Pygments (Friendly) ── */
+    pre { line-height: 125%; }
+    td.linenos .normal { color: #666666; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+    span.linenos { color: #666666; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+    td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+    span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+    .highlight .hll { background-color: #ffffcc }
+    .highlight { background: #f0f0f0; }
+    .highlight .c { color: #60A0B0; font-style: italic } /* Comment */
+    .highlight .err { border: 1px solid #F00 } /* Error */
+    .highlight .k { color: #007020; font-weight: bold } /* Keyword */
+    .highlight .o { color: #666 } /* Operator */
+    .highlight .ch { color: #60A0B0; font-style: italic } /* Comment.Hashbang */
+    .highlight .cm { color: #60A0B0; font-style: italic } /* Comment.Multiline */
+    .highlight .cp { color: #007020 } /* Comment.Preproc */
+    .highlight .cpf { color: #60A0B0; font-style: italic } /* Comment.PreprocFile */
+    .highlight .c1 { color: #60A0B0; font-style: italic } /* Comment.Single */
+    .highlight .cs { color: #60A0B0; background-color: #FFF0F0 } /* Comment.Special */
+    .highlight .gd { color: #A00000 } /* Generic.Deleted */
+    .highlight .ge { font-style: italic } /* Generic.Emph */
+    .highlight .ges { font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+    .highlight .gr { color: #F00 } /* Generic.Error */
+    .highlight .gh { color: #000080; font-weight: bold } /* Generic.Heading */
+    .highlight .gi { color: #00A000 } /* Generic.Inserted */
+    .highlight .go { color: #888 } /* Generic.Output */
+    .highlight .gp { color: #C65D09; font-weight: bold } /* Generic.Prompt */
+    .highlight .gs { font-weight: bold } /* Generic.Strong */
+    .highlight .gu { color: #800080; font-weight: bold } /* Generic.Subheading */
+    .highlight .gt { color: #04D } /* Generic.Traceback */
+    .highlight .kc { color: #007020; font-weight: bold } /* Keyword.Constant */
+    .highlight .kd { color: #007020; font-weight: bold } /* Keyword.Declaration */
+    .highlight .kn { color: #007020; font-weight: bold } /* Keyword.Namespace */
+    .highlight .kp { color: #007020 } /* Keyword.Pseudo */
+    .highlight .kr { color: #007020; font-weight: bold } /* Keyword.Reserved */
+    .highlight .kt { color: #902000 } /* Keyword.Type */
+    .highlight .m { color: #40A070 } /* Literal.Number */
+    .highlight .s { color: #4070A0 } /* Literal.String */
+    .highlight .na { color: #4070A0 } /* Name.Attribute */
+    .highlight .nb { color: #007020 } /* Name.Builtin */
+    .highlight .nc { color: #0E84B5; font-weight: bold } /* Name.Class */
+    .highlight .no { color: #60ADD5 } /* Name.Constant */
+    .highlight .nd { color: #555; font-weight: bold } /* Name.Decorator */
+    .highlight .ni { color: #D55537; font-weight: bold } /* Name.Entity */
+    .highlight .ne { color: #007020 } /* Name.Exception */
+    .highlight .nf { color: #06287E } /* Name.Function */
+    .highlight .nl { color: #002070; font-weight: bold } /* Name.Label */
+    .highlight .nn { color: #0E84B5; font-weight: bold } /* Name.Namespace */
+    .highlight .nt { color: #062873; font-weight: bold } /* Name.Tag */
+    .highlight .nv { color: #BB60D5 } /* Name.Variable */
+    .highlight .ow { color: #007020; font-weight: bold } /* Operator.Word */
+    .highlight .w { color: #BBB } /* Text.Whitespace */
+    .highlight .mb { color: #40A070 } /* Literal.Number.Bin */
+    .highlight .mf { color: #40A070 } /* Literal.Number.Float */
+    .highlight .mh { color: #40A070 } /* Literal.Number.Hex */
+    .highlight .mi { color: #40A070 } /* Literal.Number.Integer */
+    .highlight .mo { color: #40A070 } /* Literal.Number.Oct */
+    .highlight .sa { color: #4070A0 } /* Literal.String.Affix */
+    .highlight .sb { color: #4070A0 } /* Literal.String.Backtick */
+    .highlight .sc { color: #4070A0 } /* Literal.String.Char */
+    .highlight .dl { color: #4070A0 } /* Literal.String.Delimiter */
+    .highlight .sd { color: #4070A0; font-style: italic } /* Literal.String.Doc */
+    .highlight .s2 { color: #4070A0 } /* Literal.String.Double */
+    .highlight .se { color: #4070A0; font-weight: bold } /* Literal.String.Escape */
+    .highlight .sh { color: #4070A0 } /* Literal.String.Heredoc */
+    .highlight .si { color: #70A0D0; font-style: italic } /* Literal.String.Interpol */
+    .highlight .sx { color: #C65D09 } /* Literal.String.Other */
+    .highlight .sr { color: #235388 } /* Literal.String.Regex */
+    .highlight .s1 { color: #4070A0 } /* Literal.String.Single */
+    .highlight .ss { color: #517918 } /* Literal.String.Symbol */
+    .highlight .bp { color: #007020 } /* Name.Builtin.Pseudo */
+    .highlight .fm { color: #06287E } /* Name.Function.Magic */
+    .highlight .vc { color: #BB60D5 } /* Name.Variable.Class */
+    .highlight .vg { color: #BB60D5 } /* Name.Variable.Global */
+    .highlight .vi { color: #BB60D5 } /* Name.Variable.Instance */
+    .highlight .vm { color: #BB60D5 } /* Name.Variable.Magic */
+    .highlight .il { color: #40A070 } /* Literal.Number.Integer.Long */
+
+    .user-bubble .bot-body, .user-bubble .bot-body p,
+    .user-bubble .bot-body h1, .user-bubble .bot-body h2,
+    .user-bubble .bot-body h3, .user-bubble .bot-body h4,
+    .user-bubble .bot-body td, .user-bubble .bot-body th,
+    .user-bubble .bot-body strong, .user-bubble .bot-body sup { color: inherit; }
+    .user-bubble .bot-body a { color: rgba(255,255,255,0.85); }
+    /* ── View more (collapsible bubbles) ── */
+    .bubble-body { position: relative; }
+    .bubble-body.bubble-collapsed { max-height: 1000px; overflow: hidden; }
+    .bubble-body.bubble-collapsed::after {
+        content: '';
+        position: absolute;
+        bottom: 0; left: 0; right: 0;
+        height: 80px;
+        pointer-events: none;
+    }
+    .user-bubble .bubble-body.bubble-collapsed::after {
+        background: linear-gradient(transparent, var(--user-bubble));
+    }
+    .bot-content .bot-body.bubble-collapsed { max-height: 1000px; overflow: hidden; position: relative; }
+    .bot-content .bot-body.bubble-collapsed::after {
+        content: '';
+        position: absolute;
+        bottom: 0; left: 0; right: 0;
+        height: 80px;
+        pointer-events: none;
+        background: linear-gradient(transparent, var(--header-bg));
+    }
+    .view-more-btn {
+        display: inline-flex;
+        align-items: center;
+        margin-top: 10px;
+        padding: 6px 16px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        background: transparent;
+        transition: background 0.15s;
+    }
+    .user-bubble .view-more-btn {
+        border: 1.5px solid rgba(255,255,255,0.55);
+        color: rgba(255,255,255,0.9);
+    }
+    .user-bubble .view-more-btn:hover { background: rgba(255,255,255,0.12); }
+    .bot-content .view-more-btn {
+        border: 1.5px solid var(--muted);
+        color: var(--muted);
+    }
+    .bot-content .view-more-btn:hover { background: rgba(128,128,128,0.1); }
+</style>
+</head>
+<body>
+{% if not no_header %}
+<header>
+  <div class="header-avatar">{{ bot_initial }}</div>
+  <div class="header-info">
+    <span class="header-botname">{{ bot_name }}</span>
+    <span class="header-sub">Shared conversation · <a target="_blank" rel="noopener noreferrer" href="{{ url }}">{{ url }}</a></span>
+  </div>
+</header>
+{% endif %}
+<div id="copy-toast">Copied to clipboard</div>
+<div class="container">
+
+{# ── Preview placeholders (only shown when there are no real messages) ── #}
+{% if not messages.strip() %}
+<div class="msg msg-user">
+  <div class="user-bubble">
+    <p>Your message will appear here.</p>
+    <span class="ts">12:00 PM</span>
+  </div>
+</div>
+<div class="msg msg-bot">
+  <div class="bot-wrapper">
+    <div class="bot-label-row">
+      <div class="avatar">{{ bot_initial }}</div>
+      <span class="bot-name">{{ bot_name }}</span>
+    </div>
+    <div class="bot-content">
+      <div class="bot-body"><p>The bot's response will appear here.</p></div>
+      <span class="bot-ts-bottom">12:00 PM</span>
+    </div>
+  </div>
+</div>
+{% else %}
+{{ messages }}
+{% endif %}
+
+</div>
+<script>
+{{ js }}
+</script>
+</body>
+</html>

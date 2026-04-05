@@ -15,8 +15,11 @@ dependencies = [
     "jinja2>=3.0.0",
 ]
 
-[tool.setuptools]
-py-modules = ["poe_scrape"]
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.setuptools.package-data]
+poe_scrape = ["templates/*.html"]
 
 [project.scripts]
 poe-scrape = "poe_scrape:cli"

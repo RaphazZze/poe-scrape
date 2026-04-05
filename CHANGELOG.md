@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-04-05 (3)
+
+### Fix HTML export when installed via pipx
+- Converted `poe_scrape.py` from a single-file module to a proper package (`poe_scrape/`)
+- Templates are now declared as `package-data` and correctly included in the installed wheel
+- `Path(__file__).parent / "templates"` resolution now works in all install contexts (pipx, pip, venv)
+
 ## 2026-04-05 (2)
 
 ### Source links now hyperlinked
