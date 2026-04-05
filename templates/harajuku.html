@@ -425,6 +425,7 @@
 </style>
 </head>
 <body>
+{% if not no_header %}
 <header>
   <div class="header-avatar">{{ bot_initial }}</div>
   <div class="header-info">
@@ -432,6 +433,7 @@
     <span class="header-sub">Shared conversation · <a href="{{ url }}">{{ url }}</a></span>
   </div>
 </header>
+{% endif %}
 <div id="copy-toast">Copied to clipboard</div>
 <div class="container">
 

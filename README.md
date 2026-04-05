@@ -39,6 +39,7 @@ poe-scrape [OPTIONS] URLS...
 | `--time` | `12h` | Timestamp format: `12h` or `24h` |
 | `--no-thoughts` | off | Exclude AI reasoning traces |
 | `--no-sources` | off | Exclude "Learn more" source links from output |
+| `--no-header` | off | Omit the sticky header from HTML output (useful for iframe embedding) |
 | `--template` | `default` | HTML template name (in `templates/`) or path to a `.html` file. Only used with `-f html` |
 
 ---

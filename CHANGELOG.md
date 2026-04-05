@@ -2,6 +2,11 @@
 
 ## 2026-04-05 (2)
 
+### `--no-header` flag
+- New `--no-header` CLI flag omits the sticky header bar from HTML output
+- Useful for embedding conversations in iframes or articles
+- Supported across all four templates
+
 ### Terminal HTML template
 - New `terminal` template: monospace green-on-black CRT aesthetic inspired by The Matrix
 - No bubbles — flat left-aligned messages with a `❯` prompt prefix for user input

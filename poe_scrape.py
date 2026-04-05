@@ -764,6 +764,7 @@ def format_html(messages: list[dict], meta: dict, opts: dict, template: str = "d
         messages="".join(msg_blocks),
         pygments_css=_PYGMENTS_CSS,
         js=_JS,
+        no_header=opts.get("no_header", False),
     )
 
 
@@ -847,10 +848,12 @@ _EXT = {"md": ".md", "json": ".json", "html": ".html"}
               help="Exclude AI reasoning traces from output.")
 @click.option("--no-sources", "no_sources", is_flag=True, default=False,
               help="Exclude 'Learn more' source links from output.")
+@click.option("--no-header", "no_header", is_flag=True, default=False,
+              help="Omit the sticky header from HTML output (useful for iframe embedding).")
 @click.option("--template", "html_template", default=None,
               help="HTML template name (in templates/) or path to a .html file. Only used with -f html. Defaults to 'default'.")
 def cli(urls, fmt, output_stem, user_name, bot_name_override, time_fmt,
-        no_thoughts, no_sources, html_template):
+        no_thoughts, no_sources, no_header, html_template):
     """Scrape one or more Poe.com shared conversation URLs and export them.
     Inputs can also be poe-scrape JSON files for reconversion (e.g. to HTML).
 
@@ -865,6 +868,7 @@ def cli(urls, fmt, output_stem, user_name, bot_name_override, time_fmt,
         "time_fmt": time_fmt,
         "no_thoughts": no_thoughts,
         "no_sources": no_sources,
+        "no_header": no_header,
     }
 
     if html_template and fmt != "html":
