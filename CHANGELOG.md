@@ -2,6 +2,19 @@
 
 ## 2026-04-05 (2)
 
+### Source links now hyperlinked
+- "Learn more" source URLs are now preserved from Poe's HTML across all three export formats (HTML, JSON, Markdown)
+- HTML sources render as clickable `<a>` tags opening in new tabs
+- JSON and Markdown sources use `[text](url)` format
+- Stripped the trailing `---` divider that Poe inserts before "Learn more" (was causing a double divider in HTML)
+- Source section font size normalized to match body text in all templates
+
+### Thinking toggle restyled to match Poe
+- Replaced the pill-shaped button with bold "Thinking >" text and chevron in default, light, and harajuku templates
+
+### Header link opens in new tab
+- The source URL in the sticky header now uses `target="_blank"` across all four templates
+
 ### `--no-header` flag
 - New `--no-header` CLI flag omits the sticky header bar from HTML output
 - Useful for embedding conversations in iframes or articles

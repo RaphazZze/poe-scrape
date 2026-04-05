@@ -244,15 +244,15 @@
     details.thoughts { margin-bottom: 14px; }
     details.thoughts summary {
         display: inline-flex; align-items: center; gap: 6px;
-        background: var(--code-header);
-        border: 1px solid var(--code-border);
-        border-radius: 20px;
-        padding: 5px 12px;
+        background: none;
+        border: none;
+        border-radius: 0;
+        padding: 0;
         cursor: pointer; user-select: none; list-style: none;
-        font-family: var(--mono);
-        font-size: 13px; font-weight: 600;
-        color: var(--muted);
+        font-size: 1rem; font-weight: 700;
+        color: var(--text);
     }
+    details.thoughts summary:hover { opacity: 0.8; }
     details.thoughts[open] summary { margin-bottom: 10px; }
     details.thoughts summary::-webkit-details-marker { display: none; }
     .thoughts-chevron { display: inline-block; flex: none; transition: transform 0.2s; }
@@ -281,8 +281,10 @@
     .sources {
         margin-top: 14px; padding-top: 12px;
         border-top: 1px solid #d1d1d6;
-        font-size: 13px; color: var(--muted);
+        font-size: 1rem; color: var(--muted);
     }
+    .sources a { color: var(--accent); text-decoration: none; }
+    .sources a:hover { text-decoration: underline; }
     .sources strong { display: block; margin-bottom: 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
     .sources ul { padding-left: 1.2em; }
     .sources li { margin: 3px 0; }
@@ -422,7 +424,7 @@
   <div class="header-avatar">{{ bot_initial }}</div>
   <div class="header-info">
     <span class="header-botname">{{ bot_name }}</span>
-    <span class="header-sub">Shared conversation · <a href="{{ url }}">{{ url }}</a></span>
+    <span class="header-sub">Shared conversation · <a target="_blank" rel="noopener noreferrer" href="{{ url }}">{{ url }}</a></span>
   </div>
 </header>
 {% endif %}

@@ -384,8 +384,14 @@ def parse_messages(raw_items: list[dict], opts: dict) -> list[dict]:
                 plain_content, thoughts = _extract_thoughts(text)
             # Use HTML→Markdown for content (preserves headings, bold, etc.)
             content = _to_markdown(content_html, plain_content)
-            # Strip sources from markdownified content too (they may appear as links)
-            content, _ = _extract_sources(content)
+            # Strip sources from markdownified content too (they may appear as links).
+            # Prefer these over the plain-text sources — they preserve [text](url).
+            content, md_sources = _extract_sources(content)
+            if md_sources:
+                sources = md_sources
+            # Strip trailing horizontal rule that Poe inserts before "Learn more:"
+            if sources:
+                content = re.sub(r'\n*---\s*$', '', content)
             # Fallback: if no thinking was detected above but content starts with a
             # fenced ```thoughts``` or ```markdown``` block, extract it as reasoning.
             # This catches NSH-style bots where the JS heuristic couldn't fire
@@ -731,11 +737,18 @@ def format_html(messages: list[dict], meta: dict, opts: dict, template: str = "d
             body_parts.append(render(msg["content"]))
 
             if msg.get("sources") and not opts["no_sources"]:
-                items = "".join(
-                    f'<li>{html_lib.escape(src)}</li>' for src in msg["sources"]
-                )
+                md_link_re = re.compile(r'^(?:\d+\.\s*)?\[(.+?)\]\((.+?)\)$')
+                src_items = []
+                for src in msg["sources"]:
+                    m = md_link_re.match(src.strip())
+                    if m:
+                        text_safe = html_lib.escape(m.group(1))
+                        url_safe = html_lib.escape(m.group(2))
+                        src_items.append(f'<li><a target="_blank" rel="noopener noreferrer" href="{url_safe}">{text_safe}</a></li>')
+                    else:
+                        src_items.append(f'<li>{html_lib.escape(src)}</li>')
                 body_parts.append(
-                    f'<div class="sources"><strong>Learn more</strong><ul>{items}</ul></div>'
+                    f'<div class="sources"><strong>Learn more</strong><ul>{"".join(src_items)}</ul></div>'
                 )
 
             msg_sender = html_lib.escape(msg.get("sender_name") or meta["bot_name"])

@@ -326,6 +326,8 @@
         border-top: 1px solid var(--separator);
         font-size: 14px; color: var(--muted);
     }
+    .sources a { color: #55dd55; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px; }
+    .sources a:hover { text-decoration-style: solid; }
     .sources strong { display: block; margin-bottom: 3px; font-size: 14px; }
     .sources ul { padding-left: 1.2em; }
     .sources li { margin: 2px 0; }
@@ -474,7 +476,7 @@
   <div class="header-avatar">{{ bot_initial }}</div>
   <div class="header-info">
     <span class="header-botname">{{ bot_name }}</span>
-    <span class="header-sub"><a href="{{ url }}">{{ url }}</a></span>
+    <span class="header-sub"><a target="_blank" rel="noopener noreferrer" href="{{ url }}">{{ url }}</a></span>
   </div>
 </header>
 {% endif %}
