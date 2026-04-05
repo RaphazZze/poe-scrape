@@ -183,6 +183,8 @@ async def scrape_url(url: str) -> dict:
             // Poe groups messages by date inside ShareMessageList_tupleGroupContainer
             // divs. Each group starts with a MessageDate_container pill (the date label),
             // followed by ShareMessage_wrapper elements for each message turn.
+            // Each ShareMessage_wrapper for bot messages contains a BotHeader element
+            // with the sender's name — extract it per message for multi-bot support.
             const groups = document.querySelectorAll('[class*="tupleGroupContainer"]');
             const items = [];
 
@@ -199,7 +201,15 @@ async def scrape_url(url: str) -> dict:
                     const childClasses = Array.from(child.classList).join(' ');
                     if (!/ShareMessage_wrapper/i.test(childClasses)) continue;
                     const row = child.querySelector('[class*="Message_row"]:not([class*="WithFooter"])');
-                    if (row) items.push(extractMessage(row));
+                    if (row) {
+                        const msg = extractMessage(row);
+                        // Extract per-message sender name for bot messages from BotHeader
+                        if (!msg.isHuman) {
+                            const nameEl = child.querySelector('[class*="BotHeader_textContainer"] p');
+                            if (nameEl) msg.senderName = nameEl.innerText.trim();
+                        }
+                        items.push(msg);
+                    }
                 }
             }
 
@@ -211,28 +221,12 @@ async def scrape_url(url: str) -> dict:
             }
 
             // ── bot name ──────────────────────────────────────────────────────
-            // Strategy 1: look for "BotName · HH:MM" pattern near the top of the page
-            // (Poe shared pages show this in the conversation header)
+            // Derive from the first bot message's senderName (most reliable source).
             let botName = null;
-            const bodyStart = document.body.innerText.substring(0, 500);
-            const headerMatch = bodyStart.match(/([A-Za-z0-9_\\-\\.]+)\\s*·\\s*\\d{1,2}:\\d{2}/);
-            if (headerMatch) {
-                botName = headerMatch[1].trim();
-            }
-            // Strategy 2: try DOM element selectors
-            if (!botName) {
-                const candidates = [
-                    '[class*="BotHeader"] [class*="name"]',
-                    '[class*="botName"]',
-                    '[class*="ChatHeader"] [class*="title"]',
-                    '[class*="SharedConversation"] h1',
-                ];
-                for (const sel of candidates) {
-                    const el = document.querySelector(sel);
-                    if (el && el.innerText.trim()) {
-                        botName = el.innerText.trim();
-                        break;
-                    }
+            for (const item of items) {
+                if (item.itemType === 'message' && !item.isHuman && item.senderName) {
+                    botName = item.senderName;
+                    break;
                 }
             }
 
@@ -415,8 +409,9 @@ def parse_messages(raw_items: list[dict], opts: dict) -> list[dict]:
         result.append({
             "type": "message",
             "role": role,
+            "sender_name": item.get("senderName") if role == "bot" else None,
             "content": content,
-            "reasoning": thoughts,
+            "thinking": thoughts,
             "sources": sources,
             "timestamp": timestamp,
             "images": item.get("images") or [],
@@ -444,6 +439,30 @@ def format_timestamp(ts: str | None, time_fmt: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Bot name helpers
+# ---------------------------------------------------------------------------
+
+def _merged_bot_name(messages: list[dict], fallback: str) -> str:
+    """Return a display name reflecting all unique bots in the conversation.
+
+    Collects bot sender_names in order of first appearance. If only one bot is
+    present, returns that name. For multiple bots returns "Bot1 + Bot2 + ...".
+    Falls back to *fallback* if no sender names are found.
+    """
+    seen: set[str] = set()
+    names: list[str] = []
+    for msg in messages:
+        if msg.get("role") == "bot":
+            name = msg.get("sender_name") or fallback
+            if name and name not in seen:
+                seen.add(name)
+                names.append(name)
+    if not names:
+        return fallback
+    return " + ".join(names)
+
+
+# ---------------------------------------------------------------------------
 # Markdown exporter
 # ---------------------------------------------------------------------------
 
@@ -465,7 +484,7 @@ def format_md(messages: list[dict], meta: dict, opts: dict) -> str:
             continue
 
         msg = item
-        author = meta["user_name"] if msg["role"] == "user" else meta["bot_name"]
+        author = meta["user_name"] if msg["role"] == "user" else (msg.get("sender_name") or meta["bot_name"])
         ts = format_timestamp(msg["timestamp"], opts["time_fmt"])
         lines.append(f"### ❯ {author}" + (f" · {ts}" if ts else ""))
         lines.append("")
@@ -476,9 +495,9 @@ def format_md(messages: list[dict], meta: dict, opts: dict) -> str:
                 lines.append(f"📎 `{label}`")
             lines.append("")
 
-        if msg["role"] == "bot" and msg.get("reasoning") and not opts["no_thoughts"]:
+        if msg["role"] == "bot" and msg.get("thinking") and not opts["no_thoughts"]:
             lines.append("> **Thinking...**")
-            for thought_line in msg["reasoning"].splitlines():
+            for thought_line in msg["thinking"].splitlines():
                 lines.append(f"> {thought_line}" if thought_line.strip() else ">")
             lines.append("")
 
@@ -510,9 +529,9 @@ def format_json(messages: list[dict], meta: dict, opts: dict) -> str:
         msg = item
         output_messages.append({
             "role": msg["role"],
-            "author": meta["user_name"] if msg["role"] == "user" else meta["bot_name"],
+            "author": meta["user_name"] if msg["role"] == "user" else (msg.get("sender_name") or meta["bot_name"]),
             "timestamp": format_timestamp(msg["timestamp"], opts["time_fmt"]) or None,
-            "reasoning": None if opts["no_thoughts"] else msg.get("reasoning"),
+            "thinking": None if opts["no_thoughts"] else msg.get("thinking"),
             "content": msg["content"],
             "sources": [] if opts["no_sources"] else msg.get("sources", []),
             "images": [img.get("alt") or img.get("src", "").split("/")[-1].split("?")[0] for img in msg.get("images", [])],
@@ -650,8 +669,9 @@ def format_html(messages: list[dict], meta: dict, opts: dict, template: str = "d
         raw = re.sub(r'<a\s+href=', '<a target="_blank" rel="noopener noreferrer" href=', raw)
         return raw
 
-    # Avatar initials: first char of bot name, uppercased
-    bot_initial = html_lib.escape(meta["bot_name"][0].upper() if meta["bot_name"] else "B")
+    # Avatar: "+" for multi-bot conversations, first char otherwise
+    _is_multi_bot = " + " in meta["bot_name"]
+    bot_initial = html_lib.escape("+" if _is_multi_bot else (meta["bot_name"][0].upper() if meta["bot_name"] else "B"))
     bot_name_safe = html_lib.escape(meta["bot_name"])
     url_safe = html_lib.escape(meta["url"])
 
@@ -695,8 +715,7 @@ def format_html(messages: list[dict], meta: dict, opts: dict, template: str = "d
 
             body_parts = []
 
-            if msg.get("reasoning") and not opts["no_thoughts"]:
-                thoughts_escaped = html_lib.escape(msg["reasoning"])
+            if msg.get("thinking") and not opts["no_thoughts"]:
                 body_parts.append(
                     f'<details class="thoughts">'
                     f'<summary>'
@@ -705,7 +724,7 @@ def format_html(messages: list[dict], meta: dict, opts: dict, template: str = "d
                     f'<path fill="currentColor" d="M9.29 6.71a.996.996 0 0 0 0 1.41L13.17 12l-3.88 3.88a.996.996 0 1 0 1.41 1.41l4.59-4.59a.996.996 0 0 0 0-1.41L10.7 6.71a.996.996 0 0 0-1.41 0z"/>'
                     f'</svg>'
                     f'</summary>'
-                    f'<div class="thoughts-body">{thoughts_escaped}</div>'
+                    f'<div class="thoughts-body">{render(msg["thinking"])}</div>'
                     f'</details>'
                 )
 
@@ -719,12 +738,14 @@ def format_html(messages: list[dict], meta: dict, opts: dict, template: str = "d
                     f'<div class="sources"><strong>Learn more</strong><ul>{items}</ul></div>'
                 )
 
+            msg_sender = html_lib.escape(msg.get("sender_name") or meta["bot_name"])
+            msg_initial = html_lib.escape((msg.get("sender_name") or meta["bot_name"])[0].upper())
             msg_blocks.append(
                 f'<div class="msg msg-bot">\n'
                 f'  <div class="bot-wrapper">\n'
                 f'    <div class="bot-label-row">'
-                f'<div class="avatar">{bot_initial}</div>'
-                f'<span class="bot-name">{bot_name_safe}</span>'
+                f'<div class="avatar">{msg_initial}</div>'
+                f'<span class="bot-name">{msg_sender}</span>'
                 f'</div>\n'
                 f'    <div class="bot-content">\n'
                 f'      <div class="bot-body">{"".join(body_parts)}</div>\n'
@@ -781,15 +802,22 @@ def load_json_export(path: str, bot_name_override: str | None, user_name: str) -
             continue
         # JSON export stores images as plain filename strings; reconstruct for the HTML renderer
         images = [{"src": "", "alt": img} for img in msg.get("images") or []]
+        role = msg.get("role", "bot")
+        # Per-message author stored in "author" field; use it as sender_name for bot messages
+        sender_name = msg.get("author") if role == "bot" else None
         messages.append({
             "type": "message",
-            "role": msg.get("role", "bot"),
+            "role": role,
+            "sender_name": sender_name,
             "content": msg.get("content", ""),
-            "reasoning": msg.get("reasoning"),
+            "thinking": msg.get("thinking"),
             "sources": msg.get("sources") or [],
             "timestamp": msg.get("timestamp"),
             "images": images,
         })
+
+    if not bot_name_override:
+        meta["bot_name"] = _merged_bot_name(messages, meta["bot_name"])
 
     return messages, meta
 
@@ -877,14 +905,13 @@ def cli(urls, fmt, output_stem, user_name, bot_name_override, time_fmt,
                 click.echo(f"  Error scraping {url}: {e}", err=True)
                 continue
 
-            bot_name = bot_name_override or raw.get("botName") or "Bot"
+            messages = parse_messages(raw.get("items", []), opts)
+            bot_name = bot_name_override or _merged_bot_name(messages, raw.get("botName") or "Bot")
             meta = {
                 "url": url,
                 "bot_name": bot_name,
                 "user_name": user_name,
             }
-
-            messages = parse_messages(raw.get("items", []), opts)
 
         if not any(item.get("type") == "message" for item in messages):
             click.echo(f"  Error: no messages found — is this a valid shared conversation link?", err=True)

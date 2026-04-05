@@ -90,6 +90,7 @@
         margin: 1.2em 0;
         padding: 0.5em 0 0.5em 1em;
     }
+    .user-bubble .bot-body blockquote { color: inherit; }
     .user-bubble .ts {
         display: block;
         text-align: right;
@@ -164,7 +165,7 @@
         border-left: 3px solid #6b3d80;
         margin: 1.2em 0;
         padding: 0.5em 0 0.5em 1em;
-        color: #c9a8e0;
+        color: var(--text-body);
     }
     /* Inline code */
     .bot-body code {
@@ -256,15 +257,11 @@
     .thoughts-chevron { display: inline-block; flex: none; transition: transform 0.2s; }
     details.thoughts[open] .thoughts-chevron { transform: rotate(90deg); }
     .thoughts-body {
-        background: var(--code-body);
-        border: 1px solid var(--code-border);
-        border-radius: 8px;
-        padding: 12px 16px;
-        font-family: var(--mono);
-        font-size: 13px;
-        color: #7a5590;
-        white-space: pre-wrap;
-        line-height: 1.55;
+        border-left: 3px solid var(--code-border);
+        padding: 2px 0 2px 14px;
+        font-size: 14px;
+        color: #c0a0d4;
+        line-height: 1.6;
     }
     /* ── Copy toast ── */
     #copy-toast {
