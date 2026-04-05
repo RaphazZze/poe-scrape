@@ -62,6 +62,11 @@ poe-scrape https://poe.com/s/abc123 -f html -o my_chat
 poe-scrape https://poe.com/s/abc123 -f html --template light
 ```
 
+**HTML export with the terminal theme:**
+```bash
+poe-scrape https://poe.com/s/abc123 -f html --template terminal
+```
+
 **Batch export to JSON, without reasoning traces:**
 ```bash
 poe-scrape https://poe.com/s/abc https://poe.com/s/def \
@@ -100,10 +105,10 @@ poe-scrape *.json -f html --template light
 **JSON (`.json`)** — Fully structured data. Regular messages have fields: `role`, `author`, `timestamp`, `content`, `reasoning`, `sources`, `images`. Date separators appear inline as `{"type": "date", "label": "Mar 10"}`. Useful for further processing or archiving.
 
 **HTML (`.html`)** — Self-contained file with no external dependencies. Themeable chat UI:
-- User messages: right-aligned bubbles
-- Bot messages: left-aligned bubbles with avatar and name above
-- Date separators: centered pill dividers between message groups
-- Reasoning traces: collapsible "thoughts" block styled like a code block
+- User messages: right-aligned bubbles (or flat prompt-style, depending on template)
+- Bot messages: left-aligned with avatar and name above
+- Date separators: styled dividers between message groups
+- Reasoning traces: collapsible "Thinking" block
 - All Markdown rendered: headings, bold, italic, strikethrough, lists, nested lists, task list checkboxes, tables, blockquotes, inline code, fenced code blocks, horizontal rules, footnotes, hyperlinks
 - Horizontal scrolling on wide tables
 - Syntax highlighting in code blocks via Pygments
@@ -122,6 +127,7 @@ Templates are `.html` files in the `templates/` directory using [Jinja2](https:/
 | `default` | Dark UI styled after Poe. Monokai syntax highlighting. |
 | `light` | Light UI with white page, gray bubbles. Friendly syntax highlighting. |
 | `harajuku` | Dark UI with a hot pink & purple palette. Dracula syntax highlighting. |
+| `terminal` | Monospace green-on-black CRT aesthetic. No bubbles — flat messages with a `❯` prompt for user input and `[+]/[-]` ASCII toggles for thinking blocks. |
 
 **Using a built-in template:**
 ```bash

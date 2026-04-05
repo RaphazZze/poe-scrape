@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-04-05 (2)
+
+### Terminal HTML template
+- New `terminal` template: monospace green-on-black CRT aesthetic inspired by The Matrix
+- No bubbles — flat left-aligned messages with a `❯` prompt prefix for user input
+- Bot name shown as a colored label with colon (`bot_name:`)
+- ASCII `[+]/[-]` toggles for thinking blocks instead of pill buttons
+- Date separators as `Date: Mar 15` labels
+- Static block cursor in the header
+- All green palette: `#33ff33` primary, phosphor-tinted accents throughout
+- Pure CSS — no changes to the Python rendering pipeline
+
 ## 2026-04-05
 
 ### Bot name extraction
