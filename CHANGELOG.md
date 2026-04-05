@@ -8,13 +8,15 @@
 - Supported across all four templates
 
 ### Terminal HTML template
-- New `terminal` template: monospace green-on-black CRT aesthetic inspired by The Matrix
+- New `terminal` template: monospace green-on-dark CRT aesthetic inspired by The Matrix
 - No bubbles — flat left-aligned messages with a `❯` prompt prefix for user input
 - Bot name shown as a colored label with colon (`bot_name:`)
 - ASCII `[+]/[-]` toggles for thinking blocks instead of pill buttons
-- Date separators as `Date: Mar 15` labels
+- IRC-style bracketed timestamps `[2:34 PM]` and datestamps `[Date: Mar 15]`
+- Uniform 14px monospace throughout — no font size variation
 - Static block cursor in the header
 - All green palette: `#33ff33` primary, phosphor-tinted accents throughout
+- Dark gray background (`#141414`) for reduced contrast
 - Pure CSS — no changes to the Python rendering pipeline
 
 ## 2026-04-05
