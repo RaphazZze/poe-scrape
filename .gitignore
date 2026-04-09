@@ -3,6 +3,7 @@
 .claude/
 
 # Test exports
+test_export/
 test_*.html
 test_*.md
 test_*.json
