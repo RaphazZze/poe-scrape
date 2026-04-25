@@ -63,13 +63,11 @@ async def scrape_url(url: str) -> dict:
 
             result = await page.evaluate("""() => {
             // ── helpers ──────────────────────────────────────────────────────
-            // Extract reasoning text from a blockquote, preserving paragraph breaks.
-            // bq.innerText collapses <p> separators; join with double newlines instead.
-            function bqToText(bq) {
-                const ps = bq.querySelectorAll('p');
-                if (ps.length > 0)
-                    return Array.from(ps).map(p => p.innerText.trim()).filter(t => t).join('\\n\\n');
-                return bq.innerText.trim();
+            // Capture a blockquote's reasoning content. Returns both the raw innerHTML
+            // (for full Markdown reconstruction via markdownify on the Python side) and
+            // a plain-text fallback used when no HTML pipeline is available.
+            function bqCapture(bq) {
+                return { html: bq.innerHTML, text: bq.innerText.trim() };
             }
 
             // Extract structured data from a single Message_row element.
@@ -93,6 +91,7 @@ async def scrape_url(url: str) -> dict:
                 const mainMdEl = el.querySelector('[class*="markdownContainer"]');
                 let contentHtml = null;
                 let thinkingText = null;
+                let thinkingHtml = null;
 
                 if (mainMdEl) {
                     const clone = mainMdEl.cloneNode(true);
@@ -106,7 +105,9 @@ async def scrape_url(url: str) -> dict:
                             firstEl.remove();
                             const bq = prose.firstElementChild;
                             if (bq && bq.tagName === 'BLOCKQUOTE') {
-                                thinkingText = bqToText(bq);
+                                const cap = bqCapture(bq);
+                                thinkingText = cap.text;
+                                thinkingHtml = cap.html;
                                 bq.remove();
                             }
                             // No blockquote = label-only format; "Thinking" removed, thinkingText stays null
@@ -120,13 +121,19 @@ async def scrape_url(url: str) -> dict:
                         const thinkingBlock = clone.querySelector('[class*="MarkdownThinkingBlock_root"]');
                         if (thinkingBlock) {
                             const bq = thinkingBlock.querySelector('blockquote');
-                            if (bq) thinkingText = bqToText(bq);
+                            if (bq) {
+                                const cap = bqCapture(bq);
+                                thinkingText = cap.text;
+                                thinkingHtml = cap.html;
+                            }
                             thinkingBlock.remove();
                         }
                     }
 
                     // Format A (variant): NSH-style bots always put their thinking block first.
                     // Extract it regardless of language label for retro-compatibility.
+                    // Plain-text only: NSH thinking is rendered inside a <pre>, so the
+                    // innerText already preserves formatting and there's no useful HTML.
                     if (!thinkingText) {
                         const firstBlock = clone.querySelector('[class*="MarkdownCodeBlock_container"]');
                         if (firstBlock && firstBlock === clone.firstElementChild) {
@@ -176,7 +183,7 @@ async def scrape_url(url: str) -> dict:
                 });
 
                 const isHuman = Array.from(el.classList).some(c => /right/i.test(c));
-                return { itemType: 'message', text: el.innerText.trim(), contentHtml, thinkingText, images, isHuman };
+                return { itemType: 'message', text: el.innerText.trim(), contentHtml, thinkingText, thinkingHtml, images, isHuman };
             }
 
             // ── main: walk tupleGroupContainer elements in DOM order ─────────────
@@ -374,10 +381,13 @@ def parse_messages(raw_items: list[dict], opts: dict) -> list[dict]:
         if role == "bot":
             text, sources = _extract_sources(text)
             thinking_text = item.get("thinkingText")
+            thinking_html = item.get("thinkingHtml")
             if thinking_text is not None:
-                # Format B: "Thinking..." — reasoning already extracted and removed
-                # from contentHtml in JS; plain_content fallback is the full innerText
-                thoughts = thinking_text
+                # Formats B / C: reasoning already extracted and removed from
+                # contentHtml in JS. Prefer the HTML pipeline (preserves Markdown
+                # syntax: lists, code, links, emphasis, headings, ...) and fall
+                # back to plain text when no HTML was captured (e.g. Format A).
+                thoughts = _to_markdown(thinking_html, thinking_text) if thinking_html else thinking_text
                 plain_content = text.strip()
             else:
                 # Format A: "thoughts\n" — extract reasoning from innerText

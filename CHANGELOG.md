@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-04-25
+
+### Full Markdown in thinking traces
+- Thinking blockquotes are now run through the same HTML→Markdown pipeline as message content
+- Fixes a bug where bullet/numbered lists inside `<blockquote>` reasoning were silently dropped (only `<p>` children were collected)
+- All standard Markdown is now preserved in thoughts: lists (incl. nested), code blocks with language labels, links, emphasis, headings, tables, superscripts
+
 ## 2026-04-05 (3)
 
 ### Fix HTML export when installed via pipx
