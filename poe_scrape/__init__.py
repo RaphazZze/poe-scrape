@@ -4,7 +4,7 @@ import asyncio
 import html as html_lib
 import json
 import re
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import click
@@ -358,9 +358,11 @@ def parse_messages(raw_items: list[dict], opts: dict) -> list[dict]:
     result: list[dict] = []
     msg_idx = 0  # index among kept messages only — for fallback role assignment
 
+    ref_date = opts.get("ref_date") or date.today()
+
     for item in raw_items:
         if item.get("itemType") == "date":
-            result.append({"type": "date", "label": item["label"]})
+            result.append({"type": "date", "label": resolve_date_label(item["label"], ref_date)})
             continue
 
         if id(item) not in keep_ids:
@@ -435,6 +437,41 @@ def parse_messages(raw_items: list[dict], opts: dict) -> list[dict]:
         msg_idx += 1
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Relative date resolution
+# ---------------------------------------------------------------------------
+
+_WEEKDAYS = {
+    "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+    "friday": 4, "saturday": 5, "sunday": 6,
+}
+
+
+def resolve_date_label(label: str, ref_date: date) -> str:
+    """Turn a Poe relative date pill ("Today", "Yesterday", "Monday") into an
+    absolute date string anchored on *ref_date*. Non-relative labels pass through."""
+    if not label:
+        return label
+    s = label.strip()
+    low = s.lower()
+    target: date | None = None
+    if low == "today":
+        target = ref_date
+    elif low == "yesterday":
+        target = ref_date - timedelta(days=1)
+    elif low in _WEEKDAYS:
+        # Most recent past occurrence of this weekday. If the label matches
+        # ref_date's own weekday, Poe would have said "Today" instead, so it
+        # must be a week ago.
+        days_back = (ref_date.weekday() - _WEEKDAYS[low]) % 7
+        if days_back == 0:
+            days_back = 7
+        target = ref_date - timedelta(days=days_back)
+    if target is None:
+        return s
+    return target.strftime("%B %-d, %Y")
 
 
 # ---------------------------------------------------------------------------
@@ -819,10 +856,19 @@ def load_json_export(path: str, bot_name_override: str | None, user_name: str) -
         "user_name": inferred_user,
     }
 
+    # Anchor relative date labels on the export date if available; otherwise today.
+    ref_date = date.today()
+    exported_at = data.get("exported_at")
+    if exported_at:
+        try:
+            ref_date = datetime.fromisoformat(exported_at.replace("Z", "+00:00")).date()
+        except (ValueError, AttributeError):
+            pass
+
     messages = []
     for msg in data.get("messages", []):
         if msg.get("type") == "date":
-            messages.append({"type": "date", "label": msg.get("label", "")})
+            messages.append({"type": "date", "label": resolve_date_label(msg.get("label", ""), ref_date)})
             continue
         # JSON export stores images as plain filename strings; reconstruct for the HTML renderer
         images = [{"src": "", "alt": img} for img in msg.get("images") or []]
