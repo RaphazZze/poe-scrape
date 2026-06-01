@@ -4,6 +4,8 @@ import asyncio
 import html as html_lib
 import json
 import re
+import subprocess
+import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -333,6 +335,19 @@ def _to_markdown(content_html: str | None, fallback_text: str) -> str:
     return fallback_text.strip()
 
 
+def _is_empty_artifact(content: str | None, thinking: str | None, images: list | None) -> bool:
+    """True for structural-noise "messages" carrying no real payload.
+
+    Poe's full-conversation shares (you can no longer share select messages) emit
+    empty entries for the leading title element and for agent-switch dividers in
+    multi-agent threads. These have empty content and nothing else to show.
+    We only treat a turn as noise when it has no content AND no thinking AND no
+    images, so a genuinely-empty-but-roled turn (e.g. an image-only user message)
+    is never dropped.
+    """
+    return not (content or "").strip() and not (thinking or "").strip() and not images
+
+
 def parse_messages(raw_items: list[dict], opts: dict) -> list[dict]:
     """
     Process raw items from the scraper (messages + date separators) into a mixed list
@@ -424,6 +439,10 @@ def parse_messages(raw_items: list[dict], opts: dict) -> list[dict]:
         if role == "bot":
             content = re.sub(r'^Thinking\.{0,3}\s*\n+', '', content).strip()
 
+        images = item.get("images") or []
+        if _is_empty_artifact(content, thoughts, images):
+            continue
+
         result.append({
             "type": "message",
             "role": role,
@@ -432,7 +451,7 @@ def parse_messages(raw_items: list[dict], opts: dict) -> list[dict]:
             "thinking": thoughts,
             "sources": sources,
             "timestamp": timestamp,
-            "images": item.get("images") or [],
+            "images": images,
         })
         msg_idx += 1
 
@@ -872,6 +891,10 @@ def load_json_export(path: str, bot_name_override: str | None, user_name: str) -
             continue
         # JSON export stores images as plain filename strings; reconstruct for the HTML renderer
         images = [{"src": "", "alt": img} for img in msg.get("images") or []]
+        # Drop structural-noise artifacts from older exports (title element /
+        # agent-switch dividers in full-conversation shares).
+        if _is_empty_artifact(msg.get("content"), msg.get("thinking"), images):
+            continue
         role = msg.get("role", "bot")
         # Per-message author stored in "author" field; use it as sender_name for bot messages
         sender_name = msg.get("author") if role == "bot" else None
@@ -898,6 +921,36 @@ def load_json_export(path: str, bot_name_override: str | None, user_name: str) -
 
 _EXT = {"md": ".md", "json": ".json", "html": ".html"}
 
+# Browsers Playwright needs for headless scraping. chromium-headless-shell is the
+# binary that p.chromium.launch(headless=True) actually executes.
+_BROWSERS = ["chromium", "chromium-headless-shell"]
+
+
+def install_browser() -> int:
+    """Download Playwright's browser into *this* interpreter's environment.
+
+    Targets sys.executable explicitly so it works under pipx (whose isolated venv
+    has its own Playwright copy that a bare `playwright install` on PATH won't
+    provision). Returns the subprocess exit code.
+    """
+    click.echo(f"Installing Playwright browsers ({', '.join(_BROWSERS)}) for:\n  {sys.executable}")
+    return subprocess.call([sys.executable, "-m", "playwright", "install", *_BROWSERS])
+
+
+def _install_browser_callback(ctx, param, value):
+    if not value or ctx.resilient_parsing:
+        return
+    ctx.exit(install_browser())
+
+
+def _missing_browser_hint() -> str:
+    """Actionable, interpreter-correct hint for a missing Playwright browser."""
+    return (
+        "  Hint: Playwright's browser isn't installed for this interpreter.\n"
+        "        Run:  poe-scrape --install-browser\n"
+        f"        Or:   {sys.executable} -m playwright install {' '.join(_BROWSERS)}"
+    )
+
 
 @click.command()
 @click.argument("urls", nargs=-1, required=True)
@@ -921,6 +974,10 @@ _EXT = {"md": ".md", "json": ".json", "html": ".html"}
               help="Omit the sticky header from HTML output (useful for iframe embedding).")
 @click.option("--template", "html_template", default=None,
               help="HTML template name (in templates/) or path to a .html file. Only used with -f html. Defaults to 'default'.")
+@click.option("--install-browser", is_flag=True, is_eager=True, expose_value=False,
+              callback=_install_browser_callback,
+              help="Download the Playwright browser into this tool's own environment, then exit. "
+                   "Use this instead of a bare `playwright install` under pipx.")
 def cli(urls, fmt, output_stem, user_name, bot_name_override, time_fmt,
         no_thoughts, no_sources, no_header, html_template):
     """Scrape one or more Poe.com shared conversation URLs and export them.
@@ -976,6 +1033,8 @@ def cli(urls, fmt, output_stem, user_name, bot_name_override, time_fmt,
                 raw = asyncio.run(scrape_url(url))
             except Exception as e:
                 click.echo(f"  Error scraping {url}: {e}", err=True)
+                if "Executable doesn't exist" in str(e):
+                    click.echo(_missing_browser_hint(), err=True)
                 continue
 
             messages = parse_messages(raw.get("items", []), opts)

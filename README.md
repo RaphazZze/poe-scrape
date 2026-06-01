@@ -11,14 +11,24 @@ No AI/LLM calls — purely programmatic Playwright DOM scraping.
 
 ```bash
 pipx install .
-playwright install chromium
+poe-scrape --install-browser
 ```
+
+`--install-browser` downloads the Playwright browser into the tool's own
+environment. Use it instead of a bare `playwright install`: under pipx the CLI
+runs from an isolated venv with its own Playwright copy, so a `playwright install`
+that hits a different interpreter on your `PATH` won't provision the browser this
+tool actually launches.
 
 To update after making changes to the source:
 
 ```bash
 pipx install . --force
 ```
+
+If a scrape ever fails with `BrowserType.launch: Executable doesn't exist` (e.g.
+after a machine cleanup wipes `~/Library/Caches/ms-playwright/`), just re-run
+`poe-scrape --install-browser`.
 
 ---
 
@@ -41,6 +51,7 @@ poe-scrape [OPTIONS] URLS...
 | `--no-sources` | off | Exclude "Learn more" source links from output |
 | `--no-header` | off | Omit the sticky header from HTML output (useful for iframe embedding) |
 | `--template` | `default` | HTML template name (in `templates/`) or path to a `.html` file. Only used with `-f html` |
+| `--install-browser` | — | Download the Playwright browser into this tool's own environment, then exit |
 
 ---
 

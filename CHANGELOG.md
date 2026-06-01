@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-06-01
+
+### Pipx-aware browser provisioning
+- Added `poe-scrape --install-browser`, which runs `playwright install` against the tool's own interpreter (`sys.executable`) — correct under pipx, where a bare `playwright install` on `PATH` provisions the wrong venv
+- A failed launch with `BrowserType.launch: Executable doesn't exist` now prints an actionable, interpreter-correct hint instead of Playwright's generic banner
+- README install step now uses `--install-browser`
+
+### Drop empty structural-noise messages
+- Full-conversation shares (Poe no longer allows sharing select messages) emit empty entries for the leading title element and agent-switch dividers in multi-agent threads — these are now dropped during extraction and JSON re-import
+- Only dropped when a turn has no content, no thinking, and no images, so genuinely-empty-but-roled turns (e.g. image-only messages) are preserved
+
 ## 2026-04-25
 
 ### Full Markdown in thinking traces
